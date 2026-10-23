@@ -97,7 +97,7 @@ input[type=range] { width:100%; accent-color:var(--accent); }
   var KEY = 'cbj_v1';
   var mem = null;
   function blank() {
-    return { name: '', daily: {}, weekly: {}, log: [], scripts: [{}, {}, {}, {}], support: {}, check: {}, yn: { yes: '', maybe: '', no: '' }, values: [], extra: { safe: '', code: '' } };
+    return { name: '', daily: {}, weekly: {}, log: [], scripts: [{}, {}, {}, {}], support: {}, check: {}, yn: { yes: '', maybe: '', no: '' }, values: [], extra: { safe: '', code: '' }, money: { income: {}, exp: [], goal: {} } };
   }
   var S;
   function load() {
@@ -173,7 +173,7 @@ input[type=range] { width:100%; accent-color:var(--accent); }
       '<div class="card"><h2>Keep or share my entries</h2><p class="sub">Your entries live only in this browser. If you clear your browser data or change phones, they are gone \u2014 so copy a backup now and then.</p>' +
       '<button class="btn ghost" id="exp">Copy my entries</button><textarea class="out" id="out" readonly hidden></textarea><p class="hint" id="exph"></p>' +
       '<div style="height:12px"></div><button class="btn danger" id="clr">Erase everything on this phone</button></div>' +
-      '<div class="note">If something here brings up something heavy, talk to a trusted adult, a counsellor or a good friend. If you ever feel unsafe, tell someone right away.</div>';
+      '<p class="hint" style="text-align:center">Boundary Compass - version 3</p><div class="note">If something here brings up something heavy, talk to a trusted adult, a counsellor or a good friend. If you ever feel unsafe, tell someone right away.</div>';
   }
 
   function vDaily() {
@@ -267,12 +267,83 @@ input[type=range] { width:100%; accent-color:var(--accent); }
     return h;
   }
 
-  var TITLES = { home: 'Boundary Compass', daily: 'Daily check-in', weekly: 'Weekly reset', log: 'Boundary log', toolkit: 'My toolkit' };
-  var NAV = [['home', '\u2302', 'Home'], ['daily', '\u2713', 'Daily'], ['weekly', '\u25A6', 'Weekly'], ['log', '\u270E', 'Log'], ['toolkit', '\u2726', 'Toolkit']];
+  var MC = ['Needs', 'Wants', 'Saving', 'Giving'];
+  var mcat = 'Needs';
+  function mk(d) { return d.slice(0, 7); }
+  function num(v) { var n = parseFloat(String(v == null ? '' : v).replace(/,/g, '')); return isNaN(n) ? 0 : n; }
+  function naira(n) { return '\u20A6' + Math.round(n).toLocaleString('en-NG'); }
+  function monthExp() { var m = mk(TODAY); return S.money.exp.filter(function (x) { return mk(x.date) === m; }); }
+  function mSums() {
+    var inc = num(S.money.income[mk(TODAY)]), sp = 0, by = {};
+    MC.forEach(function (c) { by[c] = 0; });
+    monthExp().forEach(function (x) { sp += num(x.amt); by[x.cat] = (by[x.cat] || 0) + num(x.amt); });
+    return { inc: inc, sp: sp, left: inc - sp, by: by };
+  }
+  function catLine(s) { return MC.map(function (c) { return c + ' ' + naira(s.by[c] || 0); }).join('  |  '); }
+  function updMoney() {
+    var s = mSums(), g = S.money.goal || {}, e;
+    if ((e = document.getElementById('m-in'))) e.textContent = naira(s.inc);
+    if ((e = document.getElementById('m-sp'))) e.textContent = naira(s.sp);
+    if ((e = document.getElementById('m-left'))) e.textContent = naira(s.left);
+    if ((e = document.getElementById('m-bar'))) e.style.width = (s.inc > 0 ? Math.min(100, s.sp / s.inc * 100) : 0) + '%';
+    if ((e = document.getElementById('m-cat'))) e.textContent = catLine(s);
+    var t = num(g.target), v = num(g.saved), p = t > 0 ? Math.min(100, v / t * 100) : 0;
+    if ((e = document.getElementById('m-gbar'))) e.style.width = p + '%';
+    if ((e = document.getElementById('m-gtxt'))) e.textContent = t > 0 ? naira(v) + ' of ' + naira(t) + ' (' + Math.round(p) + '%)' : '';
+  }
+  function vMoney() {
+    var m = mk(TODAY), s = mSums(), g = S.money.goal || {}, h = '';
+    var t = num(g.target), v = num(g.saved), gp = t > 0 ? Math.min(100, v / t * 100) : 0;
+    h += '<div class="card"><h2>' + MON[pd(TODAY).getMonth()] + ' ' + pd(TODAY).getFullYear() + '</h2>' +
+      '<p class="sub">A simple monthly picture: what came in, where it went, what is left. General guidance only, not financial advice.</p>' +
+      '<label class="f" for="mi">Money in this month (allowance, gifts, earnings)</label>' +
+      '<input type="text" inputmode="decimal" id="mi" data-m="1" data-p="money|income|' + m + '" value="' + esc(S.money.income[m]) + '" placeholder="e.g. 30000">' +
+      '<div class="stats" style="margin-top:12px"><div class="stat"><b id="m-in" style="font-size:18px">' + naira(s.inc) + '</b><small>in</small></div>' +
+      '<div class="stat"><b id="m-sp" style="font-size:18px">' + naira(s.sp) + '</b><small>out</small></div>' +
+      '<div class="stat"><b id="m-left" style="font-size:18px">' + naira(s.left) + '</b><small>left</small></div></div>' +
+      '<div style="height:10px;background:var(--soft);border-radius:6px;margin-top:12px"><div id="m-bar" style="height:10px;border-radius:6px;background:var(--accent);width:' + (s.inc > 0 ? Math.min(100, s.sp / s.inc * 100) : 0) + '%"></div></div>' +
+      '<p class="hint" id="m-cat" style="margin-top:8px">' + catLine(s) + '</p></div>';
+    h += '<div class="card"><h2>Add spending</h2>' +
+      '<div class="row"><input type="text" inputmode="decimal" id="ma" placeholder="Amount (\u20A6)" aria-label="Amount"><input type="text" id="mn" placeholder="What for?" aria-label="What for"></div>' +
+      '<label class="f">Type</label><div class="chips" id="mchips">' +
+      MC.map(function (c) { return '<button class="chip' + (mcat === c ? ' on' : '') + '" data-mcat="' + c + '">' + c + '</button>'; }).join('') + '</div>' +
+      '<p class="hint" style="margin-top:8px"><b>Needs</b> = must-haves like food, transport, school. <b>Wants</b> = nice-to-haves. <b>Saving</b> = money set aside. <b>Giving</b> = tithes, gifts, helping others.</p>' +
+      '<div style="height:10px"></div><button class="btn" id="madd">Add</button></div>';
+    var items = monthExp().slice().reverse().slice(0, 10);
+    if (items.length) {
+      h += '<h3 style="margin:0 0 8px">Recent this month</h3>';
+      items.forEach(function (x) {
+        h += '<div class="entry"><small>' + nice(x.date) + ' - ' + x.cat + '</small><p><b>' + naira(num(x.amt)) + '</b>' + (x.note ? ' - ' + esc(x.note) : '') + '</p>' +
+          '<button class="btn danger small" data-mdel="' + x.id + '">Delete</button></div>';
+      });
+    }
+    h += '<div class="card" style="margin-top:14px"><h2>My savings goal</h2><p class="sub">Small, regular amounts beat big promises.</p>' +
+      '<label class="f" for="gn">What am I saving for?</label><input type="text" id="gn" data-m="1" data-p="money|goal|name" value="' + esc(g.name) + '">' +
+      '<div class="row"><div><label class="f" for="gt">Target (\u20A6)</label><input type="text" inputmode="decimal" id="gt" data-m="1" data-p="money|goal|target" value="' + esc(g.target) + '"></div>' +
+      '<div><label class="f" for="gs">Saved so far (\u20A6)</label><input type="text" inputmode="decimal" id="gs" data-m="1" data-p="money|goal|saved" value="' + esc(g.saved) + '"></div></div>' +
+      '<div style="height:10px;background:var(--soft);border-radius:6px;margin-top:14px"><div id="m-gbar" style="height:10px;border-radius:6px;background:var(--go);width:' + gp + '%"></div></div>' +
+      '<p class="hint" id="m-gtxt" style="margin-top:6px">' + (t > 0 ? naira(v) + ' of ' + naira(t) + ' (' + Math.round(gp) + '%)' : '') + '</p></div>';
+    h += '<details><summary>Pause before I spend</summary><div><p class="sub">Ask these five questions. If you are unsure, wait 24 hours.</p>' +
+      '<div class="entry"><p>1. Is this a need or a want?</p><p>2. Will I still want it tomorrow?</p><p>3. Am I buying it because someone pressured me, or to impress people?</p><p>4. Can I pay without borrowing or using money meant for something else?</p><p>5. What am I giving up to buy this?</p></div></div></details>';
+    h += '<details><summary>Money boundaries: what to say</summary><div>' +
+      '<div class="entry"><b>Someone asks to borrow</b><p><i>\u201CI don\u2019t lend money, but I can help another way.\u201D</i></p></div>' +
+      '<div class="entry"><b>Pressure to spend</b><p><i>\u201CThat\u2019s not in my budget this month.\u201D</i></p></div>' +
+      '<div class="entry"><b>Not sure yet</b><p><i>\u201CLet me think about it and get back to you.\u201D</i></p></div>' +
+      '<div class="entry"><b>Gifts or money with strings</b><p><i>\u201CThank you, but I\u2019d rather pay for myself.\u201D</i></p><p class="hint">If anyone expects something from you in return for money, gifts or favours, that is a warning sign. You can say no, leave, and tell a trusted adult.</p></div></div></details>';
+    h += '<details><summary>Stay safe with money</summary><div>' +
+      '<div class="entry"><p>\u2022 Never share your PIN, OTP, card details, password or BVN, even with someone who says they are from your bank.</p>' +
+      '<p>\u2022 Be careful with \u201Cquick money\u201D offers, investment schemes promising big returns, and unknown loan apps.</p>' +
+      '<p>\u2022 Do not send money to someone you cannot verify. Check that a transfer has really arrived before handing over goods.</p>' +
+      '<p>\u2022 Keep a record of what you spend, so you notice anything strange early.</p>' +
+      '<p>\u2022 If someone pressures or threatens you over money, tell a trusted adult.</p></div></div></details>';
+    return h;
+  }
+  var TITLES = { home: 'Boundary Compass', daily: 'Daily check-in', weekly: 'Weekly reset', log: 'Boundary log', toolkit: 'My toolkit', money: 'Money compass' };
+  var NAV = [['home', '\u2302', 'Home'], ['daily', '\u2713', 'Daily'], ['weekly', '\u25A6', 'Weekly'], ['log', '\u270E', 'Log'], ['toolkit', '\u2726', 'Toolkit'], ['money', '\u20A6', 'Money']];
 
   function render(keepScroll) {
     var y = window.scrollY;
-    var v = { home: vHome, daily: vDaily, weekly: vWeekly, log: vLog, toolkit: vToolkit }[V.tab];
+    var v = { home: vHome, daily: vDaily, weekly: vWeekly, log: vLog, toolkit: vToolkit, money: vMoney }[V.tab];
     document.getElementById('main').innerHTML = v();
     document.getElementById('ttl').textContent = TITLES[V.tab];
     document.getElementById('nav').innerHTML = NAV.map(function (n) { return '<button data-tab="' + n[0] + '" class="' + (V.tab === n[0] ? 'on' : '') + '" aria-label="' + n[2] + '"><span class="ic">' + n[1] + '</span>' + n[2] + '</button>'; }).join('');
@@ -301,6 +372,8 @@ input[type=range] { width:100%; accent-color:var(--accent); }
       ['prot', 'well', 'slip', 'adj'].forEach(function (k) { if (e[k]) o.push('  ' + { prot: 'Protecting', well: 'Went well', slip: 'Slipped/learned', adj: 'Adjust' }[k] + ': ' + e[k]); });
     });
     if (S.log.length) { o.push('', 'BOUNDARY LOG'); S.log.forEach(function (x) { o.push(x.date + ' | ' + (x.situation || '') + ' | said/did: ' + (x.said || '') + ' | felt: ' + (x.felt || '') + ' | next: ' + (x.next || '')); }); }
+    var M = S.money || {}; if (M.goal && M.goal.name) { o.push('', 'SAVINGS GOAL: ' + M.goal.name + ' | saved ' + (M.goal.saved || 0) + ' of ' + (M.goal.target || 0)); }
+    (M.exp || []).forEach(function (x) { o.push('MONEY ' + x.date + ' | ' + x.cat + ' | ' + x.amt + ' | ' + (x.note || '')); });
     return o.join('\n');
   }
 
@@ -311,6 +384,7 @@ input[type=range] { width:100%; accent-color:var(--accent); }
     if (t.dataset.pri != null) { var k = 'weekly|' + V.week + '|pri'; var a = (getP(k) || ['', '', '']).slice(); a[+t.dataset.pri] = t.value; setP(k, a); }
     if (t.dataset.str) { document.getElementById('sv').textContent = t.value; setP('weekly|' + V.week + '|str', +t.value); }
     if (t.id === 'nm') { /* name saved via data-p */ }
+    if (t.dataset.m) updMoney();
   });
   document.addEventListener('change', function (ev) {
     var t = ev.target;
@@ -337,6 +411,9 @@ input[type=range] { width:100%; accent-color:var(--accent); }
       S.log.push(x); saved(); render(); return;
     }
     if (d.ldel) { if (t.dataset.arm) { S.log = S.log.filter(function (z) { return String(z.id) !== d.ldel; }); saved(); render(true); } else { t.dataset.arm = '1'; t.textContent = 'Tap again to delete'; } return; }
+    if (d.mcat) { mcat = d.mcat; var cs = document.querySelectorAll('#mchips .chip'); for (var q = 0; q < cs.length; q++) cs[q].classList.toggle('on', cs[q].dataset.mcat === mcat); return; }
+    if (t.id === 'madd') { var amt = num(document.getElementById('ma').value); if (!amt) return; S.money.exp.push({ id: Date.now(), date: TODAY, cat: mcat, amt: amt, note: document.getElementById('mn').value.trim() }); saved(); render(true); return; }
+    if (d.mdel) { if (t.dataset.arm) { S.money.exp = S.money.exp.filter(function (z) { return String(z.id) !== d.mdel; }); saved(); render(true); } else { t.dataset.arm = '1'; t.textContent = 'Tap again to delete'; } return; }
     if (t.id === 'exp') {
       var out = document.getElementById('out'), hint = document.getElementById('exph'); out.hidden = false; out.value = exportText(); out.focus(); out.select();
       var ok = false;
